@@ -2,7 +2,6 @@ package systemlog
 
 import (
 	"archive/zip"
-	"ci/pkg/utils"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	utils "github.com/Averianov/ciutils"
 )
 
 var L *Logs
@@ -29,9 +30,11 @@ type Logs struct {
 	Status  bool
 }
 
-var talert string = "ALERT"
-var twarning string = "WARNING"
-var tinfo string = "INFO"
+const (
+	ALERT   string = "ALERT"
+	WARNING string = "WARNING"
+	INFO    string = "INFO"
+)
 
 // Status = true if need more details logs; Size (Mb) = int64 * 1 000 000 byte
 func CreateLogs(status bool, size int64) (l *Logs) {
@@ -89,15 +92,15 @@ func (l *Logs) LoggerAgent(result chan string) {
 }
 
 func (l *Logs) Info(val interface{}, any ...interface{}) {
-	l.info <- l.Sprint(tinfo, val, any...)
+	l.info <- l.Sprint(INFO, val, any...)
 }
 
 func (l *Logs) Warning(val interface{}, any ...interface{}) {
-	l.warning <- l.Sprint(twarning, val, any...)
+	l.warning <- l.Sprint(WARNING, val, any...)
 }
 
 func (l *Logs) Alert(val interface{}, any ...interface{}) {
-	l.alert <- l.Sprint(talert, val, any...)
+	l.alert <- l.Sprint(ALERT, val, any...)
 }
 
 func (l *Logs) Print(val interface{}, any ...interface{}) {
