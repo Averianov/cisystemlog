@@ -51,61 +51,65 @@ func CreateLogs(status bool, size int64) (l *Logs) {
 }
 
 // Result chanal: use if need catch emergency exit or use nil
-func (l *Logs) LoggerAgent(result chan string) {
-	var runClosing bool = false
-	var i, w, a string
+// func (l *Logs) LoggerAgent(result chan string) {
+// 	var runClosing bool = false
+// 	var i, w, a string
 
-	defer func() {
-		result <- "непредвиденное закрытие LoggerAgent"
-	}()
+// 	defer func() {
+// 		result <- "непредвиденное закрытие LoggerAgent"
+// 	}()
 
-	for {
-		select {
-		case i = <-l.info:
-			fmt.Println(i)
+// 	for {
+// 		select {
+// 		case i = <-l.info:
+// 			fmt.Println(i)
 
-		case w = <-l.warning:
-			fmt.Println(w)
-			l.WriteLog(w)
+// 		case w = <-l.warning:
+// 			fmt.Println(w)
+// 			l.WriteLog(w)
 
-		case a = <-l.alert:
-			fmt.Println(a)
-			l.WriteLog(a)
+// 		case a = <-l.alert:
+// 			fmt.Println(a)
+// 			l.WriteLog(a)
 
-		case <-l.Close:
-			fmt.Printf("## log.Agent - Try close, runClosing: %v\n", runClosing)
-			if runClosing {
-				continue
-			} else {
-				runClosing = true
-				for {
-					if len(l.info) == 0 && len(l.warning) == 0 && len(l.alert) == 0 {
-						result <- "log.Agent закрыт штатно"
-						return
-					} else {
-						continue
-					}
-				}
-			}
-		}
-	}
-}
+// 		case <-l.Close:
+// 			fmt.Printf("## log.Agent - Try close, runClosing: %v\n", runClosing)
+// 			if runClosing {
+// 				continue
+// 			} else {
+// 				runClosing = true
+// 				for {
+// 					if len(l.info) == 0 && len(l.warning) == 0 && len(l.alert) == 0 {
+// 						result <- "log.Agent закрыт штатно"
+// 						return
+// 					} else {
+// 						continue
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// }
 
 func (l *Logs) Info(val interface{}, any ...interface{}) {
-	l.info <- l.Sprint(INFO, val, any...)
+	fmt.Println(l.Sprint(INFO, val, any...))
 }
 
 func (l *Logs) Warning(val interface{}, any ...interface{}) {
-	l.warning <- l.Sprint(WARNING, val, any...)
+	w := l.Sprint(WARNING, val, any...)
+	fmt.Println(w)
+	l.WriteLog(w)
 }
 
 func (l *Logs) Alert(val interface{}, any ...interface{}) {
-	l.alert <- l.Sprint(ALERT, val, any...)
+	a := l.Sprint(ALERT, val, any...)
+	fmt.Println(a)
+	l.WriteLog(a)
 }
 
 func (l *Logs) Print(val interface{}, any ...interface{}) {
 	if l.Status {
-		l.info <- l.Sprint("", val, any...)
+		fmt.Println(l.Sprint("", val, any...))
 	}
 }
 
@@ -133,7 +137,6 @@ func (l *Logs) Sprint(mtype string, fnc interface{}, any ...interface{}) (str st
 		utils.PartDateToStr(time.Now().Second()) + "_" + mtype + "= "
 
 	str = str + fmt.Sprintf(s.(string), t...)
-	//fmt.Printf("## Sprint - %s\n", str)
 	return
 }
 
