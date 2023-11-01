@@ -6,7 +6,7 @@ import (
 
 // TestLogging ###############################################
 func TestLogging(t *testing.T) {
-	l := CreateLogs(true, 50)
+	l := CreateLogs(true, 4, 50)
 	t.Logf("TestLogging start agent\n")
 
 	l.Print("input text")
@@ -18,11 +18,6 @@ func TestLogging(t *testing.T) {
 	l.Alert("six")
 
 	t.Logf("check\n")
-	if len(l.alert) > 0 {
-		t.Errorf("Error Test TestLogging. Bad length; len(result): %d;\n", len(l.alert))
-	} else {
-		t.Logf("Ok Test TestLogging\n")
-	}
 
 	err := l.RemoveLog(3)
 	if err != nil {

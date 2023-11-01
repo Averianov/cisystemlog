@@ -22,80 +22,55 @@ var L *Logs
 
 type Logs struct {
 	sync.Mutex
-	info    chan string
-	warning chan string
-	alert   chan string
-	Close   chan bool
-	logSize int64
-	Status  bool
+	logLevel int32
+	Close    chan bool
+	logSize  int64
+	Status   bool
 }
 
 const (
 	ALERT   string = "ALERT"
 	WARNING string = "WARNING"
 	INFO    string = "INFO"
+	DEBUG   string = "DEBUG"
 )
 
-// Status = true if need more details logs; Size (Mb) = int64 * 1 000 000 byte
-func CreateLogs(status bool, size int64) (l *Logs) {
-	l = &Logs{
-		info:    make(chan string),
-		warning: make(chan string),
-		alert:   make(chan string),
-		Close:   make(chan bool),
-		logSize: size * 1000000,
-		Status:  status,
+// Status = true if need more details logs; Size (Mb) = int64 * 1 000 000 byte.\n
+// LogLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
+func CreateLogs(status bool, logLevel int32, size int64) (l *Logs) {
+	L = &Logs{
+		logLevel: logLevel,
+		logSize:  size * 1000000,
+		Status:   status,
 	}
-	L = l
-	return
+	return L
 }
 
-// Result chanal: use if need catch emergency exit or use nil
-// func (l *Logs) LoggerAgent(result chan string) {
-// 	var runClosing bool = false
-// 	var i, w, a string
+func (l *Logs) Print(val interface{}, any ...interface{}) {
+	if l.logLevel < 4 {
+		return
+	}
+	fmt.Println(l.Sprint("", val, any...))
+}
 
-// 	defer func() {
-// 		result <- "непредвиденное закрытие LoggerAgent"
-// 	}()
-
-// 	for {
-// 		select {
-// 		case i = <-l.info:
-// 			fmt.Println(i)
-
-// 		case w = <-l.warning:
-// 			fmt.Println(w)
-// 			l.WriteLog(w)
-
-// 		case a = <-l.alert:
-// 			fmt.Println(a)
-// 			l.WriteLog(a)
-
-// 		case <-l.Close:
-// 			fmt.Printf("## log.Agent - Try close, runClosing: %v\n", runClosing)
-// 			if runClosing {
-// 				continue
-// 			} else {
-// 				runClosing = true
-// 				for {
-// 					if len(l.info) == 0 && len(l.warning) == 0 && len(l.alert) == 0 {
-// 						result <- "log.Agent закрыт штатно"
-// 						return
-// 					} else {
-// 						continue
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-// }
+func (l *Logs) Debug(val interface{}, any ...interface{}) {
+	if l.logLevel < 4 {
+		return
+	}
+	fmt.Println(l.Sprint(DEBUG, val, any...))
+}
 
 func (l *Logs) Info(val interface{}, any ...interface{}) {
+	if l.logLevel < 3 {
+		return
+	}
 	fmt.Println(l.Sprint(INFO, val, any...))
 }
 
 func (l *Logs) Warning(val interface{}, any ...interface{}) {
+	if l.logLevel < 2 {
+		return
+	}
 	w := l.Sprint(WARNING, val, any...)
 	fmt.Println(w)
 	l.WriteLog(w)
@@ -105,12 +80,6 @@ func (l *Logs) Alert(val interface{}, any ...interface{}) {
 	a := l.Sprint(ALERT, val, any...)
 	fmt.Println(a)
 	l.WriteLog(a)
-}
-
-func (l *Logs) Print(val interface{}, any ...interface{}) {
-	if l.Status {
-		fmt.Println(l.Sprint("", val, any...))
-	}
 }
 
 func (l *Logs) Sprint(mtype string, fnc interface{}, any ...interface{}) (str string) {
