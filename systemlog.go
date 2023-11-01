@@ -23,9 +23,7 @@ var L *Logs
 type Logs struct {
 	sync.Mutex
 	logLevel int32
-	Close    chan bool
 	logSize  int64
-	Status   bool
 }
 
 const (
@@ -37,11 +35,10 @@ const (
 
 // Status = true if need more details logs; Size (Mb) = int64 * 1 000 000 byte.\n
 // LogLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
-func CreateLogs(status bool, logLevel int32, size int64) (l *Logs) {
+func CreateLogs(logLevel int32, size int64) (l *Logs) {
 	L = &Logs{
 		logLevel: logLevel,
 		logSize:  size * 1000000,
-		Status:   status,
 	}
 	return L
 }
