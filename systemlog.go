@@ -48,10 +48,10 @@ type Logs struct {
 }
 
 const (
-	ALERT   string = "ALERT"
-	WARNING string = "WARNING"
+	ALERT   string = "ALRT"
+	WARNING string = "WARN"
 	INFO    string = "INFO"
-	DEBUG   string = "DEBUG"
+	DEBUG   string = "DEBG"
 )
 
 // ### From Logrus Code #############################################
@@ -159,19 +159,20 @@ func (l *Logs) Alert(any ...interface{}) {
 }
 
 func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
-
-	l.caller = getCaller()
-
-	funcVal := l.caller.Function
-	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line)
-	mtype = mtype + ":" + funcVal + ":" + fileVal
-
 	str = strconv.Itoa(time.Now().Year()) + "." +
 		utils.PartDateToStr(int(time.Now().Month())) + "." +
 		utils.PartDateToStr(time.Now().Day()) + "_" +
 		utils.PartDateToStr(time.Now().Hour()) + ":" +
 		utils.PartDateToStr(time.Now().Minute()) + ":" +
-		utils.PartDateToStr(time.Now().Second()) + "_" + mtype + "\n"
+		utils.PartDateToStr(time.Now().Second())
+
+	l.caller = getCaller()
+	funcVal := l.caller.Function
+	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line)
+	if mtype == "" {
+		mtype = "\t"
+	}
+	str += "  " + mtype + "  " + funcVal[strings.LastIndex(funcVal, "/")+1:] + " " + fileVal[strings.LastIndex(fileVal, "/")+1:] + "\n"
 
 	str += fmt.Sprintf(fmt.Sprintf("%s", any[0]), any[1:]...)
 	str += "\n"
