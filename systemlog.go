@@ -167,15 +167,16 @@ func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
 		utils.PartDateToStr(time.Now().Second())
 
 	l.caller = getCaller()
-	funcVal := l.caller.Function
+	//funcVal := l.caller.Function
 	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line)
 	if mtype == "" {
 		mtype = "\t"
 	}
-	str += "  " + mtype + "  " + funcVal[strings.LastIndex(funcVal, "/")+1:] + " " + fileVal[strings.LastIndex(fileVal, "/")+1:] + "\n"
-
+	str += "  " + mtype
+	//str += "  " + funcVal[strings.LastIndex(funcVal, "/")+1:]
+	str += "  " + fileVal[strings.LastIndex(fileVal, "/")+1:] + ":  "
 	str += fmt.Sprintf(fmt.Sprintf("%s", any[0]), any[1:]...)
-	str += "\n"
+	//str += "\n"
 	return
 }
 
