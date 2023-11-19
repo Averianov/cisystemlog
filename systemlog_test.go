@@ -10,6 +10,7 @@ func TestLogging(t *testing.T) {
 	t.Logf("TestLogging start agent\n")
 
 	l.Print("input text")
+	l.Debug("debug text")
 	l.Info("hello test %s", "one")
 	l.Info("two")
 	l.Warning("hello test %s", "three")

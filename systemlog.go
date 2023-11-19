@@ -133,27 +133,27 @@ func (l *Logs) Debug(any ...interface{}) {
 	if l.logLevel < 4 {
 		return
 	}
-	fmt.Println(l.Sprint(DEBUG, any...))
+	fmt.Println(l.Sprint("\033[37m"+DEBUG+"\033[0m", any...))
 }
 
 func (l *Logs) Info(any ...interface{}) {
 	if l.logLevel < 3 {
 		return
 	}
-	fmt.Println(l.Sprint(INFO, any...))
+	fmt.Println(l.Sprint("\033[96m"+INFO+"\033[0m", any...))
 }
 
 func (l *Logs) Warning(any ...interface{}) {
 	if l.logLevel < 2 {
 		return
 	}
-	w := l.Sprint(WARNING, any...)
+	w := l.Sprint("\033[93m"+WARNING+"\033[0m", any...)
 	fmt.Println(w)
 	l.WriteLog(w)
 }
 
 func (l *Logs) Alert(any ...interface{}) {
-	a := l.Sprint(ALERT, any...)
+	a := l.Sprint("\033[91m"+ALERT+"\033[0m", any...)
 	fmt.Println(a)
 	l.WriteLog(a)
 }
@@ -165,17 +165,19 @@ func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
 		utils.PartDateToStr(time.Now().Hour()) + ":" +
 		utils.PartDateToStr(time.Now().Minute()) + ":" +
 		utils.PartDateToStr(time.Now().Second())
-
 	l.caller = getCaller()
 	//funcVal := l.caller.Function
 	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line)
+	str += " \033[90m\033[47m"
+	//str += "  " + funcVal[strings.LastIndex(funcVal, "/")+1:]
+	str += fileVal[strings.LastIndex(fileVal, "/")+1:]
+	str += "\033[0m\t"
+
 	if mtype == "" {
 		mtype = "\t"
 	}
-	str += "  " + mtype
-	//str += "  " + funcVal[strings.LastIndex(funcVal, "/")+1:]
-	str += "  " + fileVal[strings.LastIndex(fileVal, "/")+1:] + ":  "
-	str += fmt.Sprintf(fmt.Sprintf("%s", any[0]), any[1:]...)
+	str += " " + mtype + " "
+	str += " " + fmt.Sprintf(fmt.Sprintf("%s", any[0]), any[1:]...)
 	//str += "\n"
 	return
 }
