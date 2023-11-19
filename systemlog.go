@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -20,8 +19,30 @@ var L *Logs
 
 // ### Logger Factory
 
+// ### From Logrus Code #############################################
+// #################################################################
+var (
+	// qualified package name, cached at first use
+	logrusPackage string
+
+	// Positions in the call stack when tracing to report the calling method
+	minimumCallerDepth int
+
+	// Used for caller information initialisation
+	callerInitOnce sync.Once
+)
+
+const (
+	maximumCallerDepth int = 25
+	knownLogrusFrames  int = 4
+)
+
+// #################################################################
+// #################################################################
+
 type Logs struct {
 	sync.Mutex
+	caller   *runtime.Frame
 	logLevel int32
 	logSize  int64
 }
@@ -33,6 +54,64 @@ const (
 	DEBUG   string = "DEBUG"
 )
 
+// ### From Logrus Code #############################################
+// #################################################################
+// getCaller retrieves the name of the first non-logrus calling function
+func getCaller() *runtime.Frame {
+	// cache this package's fully-qualified name
+	callerInitOnce.Do(func() {
+		pcs := make([]uintptr, maximumCallerDepth)
+		_ = runtime.Callers(0, pcs)
+
+		// dynamic get the package name and the minimum caller depth
+		for i := 0; i < maximumCallerDepth; i++ {
+			funcName := runtime.FuncForPC(pcs[i]).Name()
+			if strings.Contains(funcName, "getCaller") {
+				logrusPackage = getPackageName(funcName)
+				break
+			}
+		}
+
+		minimumCallerDepth = knownLogrusFrames
+	})
+
+	// Restrict the lookback frames to avoid runaway lookups
+	pcs := make([]uintptr, maximumCallerDepth)
+	depth := runtime.Callers(minimumCallerDepth, pcs)
+	frames := runtime.CallersFrames(pcs[:depth])
+
+	for f, again := frames.Next(); again; f, again = frames.Next() {
+		pkg := getPackageName(f.Function)
+
+		// If the caller isn't part of this package, we're done
+		if pkg != logrusPackage {
+			return &f //nolint:scopelint
+		}
+	}
+
+	// if we got here, we failed to find the caller's context
+	return nil
+}
+
+// getPackageName reduces a fully qualified function name to the package name
+// There really ought to be to be a better way...
+func getPackageName(f string) string {
+	for {
+		lastPeriod := strings.LastIndex(f, ".")
+		lastSlash := strings.LastIndex(f, "/")
+		if lastPeriod > lastSlash {
+			f = f[:lastPeriod]
+		} else {
+			break
+		}
+	}
+
+	return f
+}
+
+// #################################################################
+// #################################################################
+
 // Status = true if need more details logs; Size (Mb) = int64 * 1 000 000 byte.\n
 // LogLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
 func CreateLogs(logLevel int32, size int64) (l *Logs) {
@@ -43,66 +122,59 @@ func CreateLogs(logLevel int32, size int64) (l *Logs) {
 	return L
 }
 
-func (l *Logs) Print(val interface{}, any ...interface{}) {
+func (l *Logs) Print(any ...interface{}) {
 	if l.logLevel < 4 {
 		return
 	}
-	fmt.Println(l.Sprint("", val, any...))
+	fmt.Println(l.Sprint("", any...))
 }
 
-func (l *Logs) Debug(val interface{}, any ...interface{}) {
+func (l *Logs) Debug(any ...interface{}) {
 	if l.logLevel < 4 {
 		return
 	}
-	fmt.Println(l.Sprint(DEBUG, val, any...))
+	fmt.Println(l.Sprint(DEBUG, any...))
 }
 
-func (l *Logs) Info(val interface{}, any ...interface{}) {
+func (l *Logs) Info(any ...interface{}) {
 	if l.logLevel < 3 {
 		return
 	}
-	fmt.Println(l.Sprint(INFO, val, any...))
+	fmt.Println(l.Sprint(INFO, any...))
 }
 
-func (l *Logs) Warning(val interface{}, any ...interface{}) {
+func (l *Logs) Warning(any ...interface{}) {
 	if l.logLevel < 2 {
 		return
 	}
-	w := l.Sprint(WARNING, val, any...)
+	w := l.Sprint(WARNING, any...)
 	fmt.Println(w)
 	l.WriteLog(w)
 }
 
-func (l *Logs) Alert(val interface{}, any ...interface{}) {
-	a := l.Sprint(ALERT, val, any...)
+func (l *Logs) Alert(any ...interface{}) {
+	a := l.Sprint(ALERT, any...)
 	fmt.Println(a)
 	l.WriteLog(a)
 }
 
-func (l *Logs) Sprint(mtype string, fnc interface{}, any ...interface{}) (str string) {
-	var t []interface{}
-	var s interface{}
-	funcName := l.GetFunctionName(fnc)
-	//fmt.Printf("## Sprint - funcName: %s\n", funcName)
-	if funcName != "" {
-		mtype = mtype + ":" + funcName
-		if len(any) > 0 {
-			s = any[0]
-			t = append(t, any[1:]...)
-		}
-	} else {
-		s = fnc
-		t = append(t, any...)
-	}
+func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
+
+	l.caller = getCaller()
+
+	funcVal := l.caller.Function
+	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line)
+	mtype = mtype + ":" + funcVal + ":" + fileVal
 
 	str = strconv.Itoa(time.Now().Year()) + "." +
 		utils.PartDateToStr(int(time.Now().Month())) + "." +
 		utils.PartDateToStr(time.Now().Day()) + "_" +
 		utils.PartDateToStr(time.Now().Hour()) + ":" +
 		utils.PartDateToStr(time.Now().Minute()) + ":" +
-		utils.PartDateToStr(time.Now().Second()) + "_" + mtype + "= "
+		utils.PartDateToStr(time.Now().Second()) + "_" + mtype + "\n"
 
-	str = str + fmt.Sprintf(s.(string), t...)
+	str += fmt.Sprintf(fmt.Sprintf("%s", any[0]), any[1:]...)
+	str += "\n"
 	return
 }
 
@@ -184,20 +256,5 @@ func (l *Logs) CompressLog() (err error) {
 	}
 
 	err = os.RemoveAll("errors.log")
-	return
-}
-
-func (l *Logs) GetFunctionName(i interface{}) (funcName string) {
-	switch strings.Contains(reflect.TypeOf(i).String(), "func") {
-	//switch i.(type) {
-	// case i.(type):
-	// 	funcName = runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
-	// case "func()":
-	// 	funcName = runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
-	case true:
-		//fmt.Printf("## GetFunctionName - start check - %T\n", i)
-		funcName = runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
-		//fmt.Printf("## GetFunctionName - %s\n", funcName)
-	}
 	return
 }
