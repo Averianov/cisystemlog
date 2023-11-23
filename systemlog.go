@@ -19,6 +19,20 @@ var L *Logs
 
 // ### Logger Factory
 
+type Logs struct {
+	sync.Mutex
+	caller      *runtime.Frame
+	logLevel    int32
+	logFileSize int64
+}
+
+const (
+	ALERT   string = "ALRT"
+	WARNING string = "WARN"
+	INFO    string = "INFO"
+	DEBUG   string = "DEBG"
+)
+
 // ### From Logrus Code #############################################
 // #################################################################
 var (
@@ -37,25 +51,22 @@ const (
 	knownLogrusFrames  int = 4
 )
 
-// #################################################################
-// #################################################################
+// getPackageName reduces a fully qualified function name to the package name
+// There really ought to be to be a better way...
+func getPackageName(f string) string {
+	for {
+		lastPeriod := strings.LastIndex(f, ".")
+		lastSlash := strings.LastIndex(f, "/")
+		if lastPeriod > lastSlash {
+			f = f[:lastPeriod]
+		} else {
+			break
+		}
+	}
 
-type Logs struct {
-	sync.Mutex
-	caller   *runtime.Frame
-	logLevel int32
-	logSize  int64
+	return f
 }
 
-const (
-	ALERT   string = "ALRT"
-	WARNING string = "WARN"
-	INFO    string = "INFO"
-	DEBUG   string = "DEBG"
-)
-
-// ### From Logrus Code #############################################
-// #################################################################
 // getCaller retrieves the name of the first non-logrus calling function
 func getCaller() *runtime.Frame {
 	// cache this package's fully-qualified name
@@ -93,22 +104,6 @@ func getCaller() *runtime.Frame {
 	return nil
 }
 
-// getPackageName reduces a fully qualified function name to the package name
-// There really ought to be to be a better way...
-func getPackageName(f string) string {
-	for {
-		lastPeriod := strings.LastIndex(f, ".")
-		lastSlash := strings.LastIndex(f, "/")
-		if lastPeriod > lastSlash {
-			f = f[:lastPeriod]
-		} else {
-			break
-		}
-	}
-
-	return f
-}
-
 // #################################################################
 // #################################################################
 
@@ -116,12 +111,13 @@ func getPackageName(f string) string {
 // LogLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
 func CreateLogs(logLevel int32, size int64) (l *Logs) {
 	L = &Logs{
-		logLevel: logLevel,
-		logSize:  size * 1000000,
+		logLevel:    logLevel,
+		logFileSize: size * 1000000,
 	}
 	return L
 }
 
+// Print - just print message without any type and logging
 func (l *Logs) Print(any ...interface{}) {
 	if l.logLevel < 4 {
 		return
@@ -129,35 +125,44 @@ func (l *Logs) Print(any ...interface{}) {
 	fmt.Println(l.Sprint("", any...))
 }
 
+// Debug - message used for debug data
 func (l *Logs) Debug(any ...interface{}) {
 	if l.logLevel < 4 {
 		return
 	}
-	fmt.Println(l.Sprint("\033[37m"+DEBUG+"\033[0m", any...))
+	w := l.Sprint("\033[37m"+DEBUG+"\033[0m", any...)
+	fmt.Println(w)
+	l.WriteLogRecord(w)
 }
 
+// Info - message used for informing data
 func (l *Logs) Info(any ...interface{}) {
 	if l.logLevel < 3 {
 		return
 	}
-	fmt.Println(l.Sprint("\033[96m"+INFO+"\033[0m", any...))
+	w := l.Sprint("\033[96m"+INFO+"\033[0m", any...)
+	fmt.Println(w)
+	l.WriteLogRecord(w)
 }
 
+// Warning - message used for errors and other warning events
 func (l *Logs) Warning(any ...interface{}) {
 	if l.logLevel < 2 {
 		return
 	}
 	w := l.Sprint("\033[93m"+WARNING+"\033[0m", any...)
 	fmt.Println(w)
-	l.WriteLog(w)
+	l.WriteLogRecord(w)
 }
 
+// Alert - used for emergency message
 func (l *Logs) Alert(any ...interface{}) {
 	a := l.Sprint("\033[91m"+ALERT+"\033[0m", any...)
 	fmt.Println(a)
-	l.WriteLog(a)
+	l.WriteLogRecord(a)
 }
 
+// Sprint - make log record (date_time source	type event)
 func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
 	str = strconv.Itoa(time.Now().Year()) + "." +
 		utils.PartDateToStr(int(time.Now().Month())) + "." +
@@ -166,29 +171,30 @@ func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
 		utils.PartDateToStr(time.Now().Minute()) + ":" +
 		utils.PartDateToStr(time.Now().Second())
 	l.caller = getCaller()
-	//funcVal := l.caller.Function
-	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line)
-	str += " \033[90m\033[47m"
-	//str += "  " + funcVal[strings.LastIndex(funcVal, "/")+1:]
-	str += fileVal[strings.LastIndex(fileVal, "/")+1:]
-	str += "\033[0m\t"
 
-	if mtype == "" {
-		mtype = "\t"
+	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line) // get source - file name and line number
+	str += " \033[90m\033[47m"                                    // set white background
+	str += fileVal[strings.LastIndex(fileVal, "/")+1:]            // get last parsed value
+	str += "\033[0m"
+	str += "\t"
+
+	//funcVal := l.caller.Function // get function name
+	//str += "  " + funcVal[strings.LastIndex(funcVal, "/")+1:]
+
+	if mtype != "" {
+		mtype += " "
 	}
-	str += " " + mtype + " "
-	str += " " + fmt.Sprintf(fmt.Sprintf("%s", any[0]), any[1:]...)
-	//str += "\n"
+	str += mtype
+	str += fmt.Sprintf(fmt.Sprintf("%s", any[0]), any[1:]...)
 	return
 }
 
-func (l *Logs) WriteLog(log string) (err error) {
+// WriteLogRecord, i - is what count retries for removing log
+func (l *Logs) WriteLogRecord(log string) (err error) {
 	l.Lock()
 	var f *os.File
 	if f, err = os.OpenFile("errors.log", os.O_RDWR|os.O_APPEND, 0660); err != nil {
-		//fmt.Printf("## WriteLog - Not Opened, err: %s\n", err.Error())
 		if f, err = os.Create("errors.log"); err != nil {
-			//fmt.Printf("## WriteLog - Cannot Created, err: %s\n", err.Error())
 			return
 		}
 	}
@@ -202,11 +208,10 @@ func (l *Logs) WriteLog(log string) (err error) {
 	if err != nil {
 		fmt.Printf("## WriteLog - Error get file info: %s\n", err.Error())
 	} else {
-		//l.Print("WriteLog - длина файла: %d bytes", fi.Size())
-		if fi.Size() > l.logSize { // 50Mb - максимальный размер лог-файла
+		if fi.Size() > l.logFileSize { // 50Mb - максимальный размер лог-файла
 			f.Close()
-			l.CompressLog()
-			return l.WriteLog(log)
+			l.CompressLogs()
+			return l.WriteLogRecord(log)
 		}
 	}
 
@@ -217,21 +222,20 @@ func (l *Logs) WriteLog(log string) (err error) {
 	return
 }
 
-// what count retries for removing log
-func (l *Logs) RemoveLog(i int) (err error) {
-	//fmt.Printf("## RemoveLog - remove 'errors.log'\n")
+// RemoveLogFile, i - is what count retries for removing log
+func (l *Logs) RemoveLogFile(i int) (err error) {
 	err = os.RemoveAll("errors.log")
 	if err != nil && i > 0 {
 		time.Sleep(100 * time.Millisecond)
 		i--
 		fmt.Printf("## RemoveLog - retry remove %d\n", i)
-		return l.RemoveLog(i)
+		return l.RemoveLogFile(i)
 	}
 	return
 }
 
-// Удаляет старый архив, создаёт новый архив из лог-файла и удаляет старый лог-файл
-func (l *Logs) CompressLog() (err error) {
+// CompressLogs removing old archive file (archive.zip), make new archive file and removing old log file (errors.log)
+func (l *Logs) CompressLogs() (err error) {
 	os.RemoveAll("archive.zip")
 
 	var a *os.File
