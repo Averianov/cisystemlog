@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	utils "github.com/Averianov/ciutils"
 )
 
 var L *Logs
@@ -164,20 +162,14 @@ func (l *Logs) Alert(any ...interface{}) {
 
 // Sprint - make log record (date_time source	type event)
 func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
-	str = strconv.Itoa(time.Now().Year()) + "." +
-		utils.PartDateToStr(int(time.Now().Month())) + "." +
-		utils.PartDateToStr(time.Now().Day()) + "_" +
-		utils.PartDateToStr(time.Now().Hour()) + ":" +
-		utils.PartDateToStr(time.Now().Minute()) + ":" +
-		utils.PartDateToStr(time.Now().Second())
-	l.caller = getCaller()
+	str = getTime()
 
+	l.caller = getCaller()
 	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line) // get source - file name and line number
 	str += " \033[90m\033[47m"                                    // set white background
 	str += fileVal[strings.LastIndex(fileVal, "/")+1:]            // get last parsed value
 	str += "\033[0m"
 	str += "\t"
-
 	//funcVal := l.caller.Function // get function name
 	//str += "  " + funcVal[strings.LastIndex(funcVal, "/")+1:]
 
@@ -264,5 +256,26 @@ func (l *Logs) CompressLogs() (err error) {
 	}
 
 	err = os.RemoveAll("errors.log")
+	return
+}
+
+func getTime() (str string) {
+	var partDateToStr func(int) string = func(p int) string {
+		var str string
+		if p < 10 {
+			str = "0" + strconv.Itoa(p)
+		} else {
+			str = strconv.Itoa(p)
+		}
+		return str
+	}
+
+	now := time.Now()
+	str = partDateToStr(now.Year()) + "." +
+		partDateToStr(int(now.Month())) + "." +
+		partDateToStr(now.Day()) + "_" +
+		partDateToStr(now.Hour()) + ":" +
+		partDateToStr(now.Minute()) + ":" +
+		partDateToStr(now.Second())
 	return
 }
