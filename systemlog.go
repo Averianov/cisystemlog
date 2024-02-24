@@ -105,7 +105,7 @@ func getCaller() *runtime.Frame {
 // #################################################################
 // #################################################################
 
-// Status = true if need more details logs; Size (Mb) = int64 * 1 000 000 byte.\n
+// Size (Mb) = int64 * 1 000 000 byte. If Size==0 then filelog not created.
 // LogLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
 func CreateLogs(logLevel int32, size int64) (l *Logs) {
 	L = &Logs{
@@ -184,6 +184,7 @@ func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
 // WriteLogRecord, i - is what count retries for removing log
 func (l *Logs) WriteLogRecord(log string) (err error) {
 	if l.logFileSize == 0 {
+		//
 		return
 	}
 	l.Lock()
