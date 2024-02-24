@@ -20,7 +20,7 @@ func TestLogging(t *testing.T) {
 
 	t.Logf("check\n")
 
-	err := l.RemoveLog(3)
+	err := l.RemoveLogFile(3)
 	if err != nil {
 		t.Errorf("Error Test TestLogging. Error remove log-file: %s;\n", err.Error())
 	}
