@@ -183,6 +183,9 @@ func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
 }
 
 func (l *Logs) WriteLog(log string) (err error) {
+	if l.logSize == 0 {
+		return
+	}
 	l.Lock()
 	var f *os.File
 	if f, err = os.OpenFile("errors.log", os.O_RDWR|os.O_APPEND, 0660); err != nil {
