@@ -17,7 +17,8 @@ func TestLogging(t *testing.T) {
 	l.Warning("four")
 	l.Alert("hello test %s", "five")
 	l.Alert("six")
-
+	l.Alert(uint16(25))
+	t.Errorf("s")
 	t.Logf("check\n")
 
 	err := l.RemoveLogFile(3)

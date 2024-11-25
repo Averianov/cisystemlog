@@ -177,7 +177,7 @@ func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
 		mtype += " "
 	}
 	str += mtype
-	str += fmt.Sprintf(fmt.Sprintf("%s", any[0]), any[1:]...)
+	str += fmt.Sprintf(fmt.Sprintf("%v", any[0]), any[1:]...)
 	return
 }
 
