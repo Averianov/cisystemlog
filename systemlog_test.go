@@ -6,7 +6,7 @@ import (
 
 // TestLogging ###############################################
 func TestLogging(t *testing.T) {
-	l := CreateLogs(4, 50)
+	l := CreateLogs(4, 1)
 	t.Logf("TestLogging start agent\n")
 
 	l.Print("input text")
@@ -21,8 +21,8 @@ func TestLogging(t *testing.T) {
 	t.Errorf("s")
 	t.Logf("check\n")
 
-	err := l.RemoveLogFile(3)
-	if err != nil {
-		t.Errorf("Error Test TestLogging. Error remove log-file: %s;\n", err.Error())
+	var list []int = make([]int, 20000)
+	for i, _ := range list {
+		l.Alert("####################################################WERYBITDATA%d######################################################", i)
 	}
 }

@@ -6,8 +6,8 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +22,7 @@ type Logs struct {
 	caller      *runtime.Frame
 	logLevel    int32
 	logFileSize int64
+	f           *os.File
 }
 
 const (
@@ -29,6 +30,9 @@ const (
 	WARNING string = "WARN"
 	INFO    string = "INFO"
 	DEBUG   string = "DEBG"
+
+	ERROR_LOG_FILENAME     string = "errors.log"
+	ERROR_LOG_BKP_FILENAME string = "errors_bkp.log"
 )
 
 // ### From Logrus Code #############################################
@@ -112,6 +116,9 @@ func CreateLogs(logLevel int32, size int64) (l *Logs) {
 		logLevel:    logLevel,
 		logFileSize: size * 1000000,
 	}
+	L.RemoveLogFile(ERROR_LOG_BKP_FILENAME, 2)
+	L.RemoveLogFile(ERROR_LOG_FILENAME, 2)
+	L.RemoveLogFile(ERROR_LOG_FILENAME+".zip", 2)
 	return L
 }
 
@@ -129,8 +136,8 @@ func (l *Logs) Debug(any ...interface{}) {
 		return
 	}
 	w := l.Sprint("\033[37m"+DEBUG+"\033[0m", any...)
-	fmt.Println(w)
 	l.WriteLogRecord(w)
+	fmt.Println(w)
 }
 
 // Info - message used for informing data
@@ -139,8 +146,8 @@ func (l *Logs) Info(any ...interface{}) {
 		return
 	}
 	w := l.Sprint("\033[96m"+INFO+"\033[0m", any...)
-	fmt.Println(w)
 	l.WriteLogRecord(w)
+	fmt.Println(w)
 }
 
 // Warning - message used for errors and other warning events
@@ -149,27 +156,35 @@ func (l *Logs) Warning(any ...interface{}) {
 		return
 	}
 	w := l.Sprint("\033[93m"+WARNING+"\033[0m", any...)
-	fmt.Println(w)
 	l.WriteLogRecord(w)
+	fmt.Println(w)
 }
 
 // Alert - used for emergency message
 func (l *Logs) Alert(any ...interface{}) {
 	a := l.Sprint("\033[91m"+ALERT+"\033[0m", any...)
-	fmt.Println(a)
 	l.WriteLogRecord(a)
+	fmt.Println(a)
 }
 
 // Sprint - make log record (date_time source	type event)
 func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
-	str = getTime()
+	str = time.Now().Format("2006.01.02_15:04:05")
 
-	l.caller = getCaller()
-	fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line) // get source - file name and line number
-	str += " \033[90m\033[47m"                                    // set white background
-	str += fileVal[strings.LastIndex(fileVal, "/")+1:]            // get last parsed value
-	str += "\033[0m"
-	str += "\t"
+	if mtype == "\033[96m"+INFO+"\033[0m" {
+		str += "			"
+	} else {
+		l.caller = getCaller()
+		if l.caller != nil {
+			fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line) // get source - file name and line number
+			str += " \033[90m\033[47m"                                    // set white background
+			str += fileVal[strings.LastIndex(fileVal, "/")+1:]            // get last parsed value
+			str += "\033[0m"
+			str += "\t"
+		} else {
+			str += "			"
+		}
+	}
 	//funcVal := l.caller.Function // get function name
 	//str += "  " + funcVal[strings.LastIndex(funcVal, "/")+1:]
 
@@ -189,8 +204,9 @@ func (l *Logs) WriteLogRecord(log string) (err error) {
 	}
 	l.Lock()
 	var f *os.File
-	if f, err = os.OpenFile("errors.log", os.O_RDWR|os.O_APPEND, 0660); err != nil {
-		if f, err = os.Create("errors.log"); err != nil {
+	if f, err = os.OpenFile(ERROR_LOG_FILENAME, os.O_RDWR|os.O_APPEND, 0660); err != nil {
+		if f, err = os.Create(ERROR_LOG_FILENAME); err != nil {
+			fmt.Printf("%s\n", err.Error())
 			return
 		}
 	}
@@ -199,6 +215,11 @@ func (l *Logs) WriteLogRecord(log string) (err error) {
 		l.Unlock()
 	}()
 
+	if _, err = f.WriteString(log + `
+`); err != nil {
+		return
+	}
+
 	var fi fs.FileInfo
 	fi, err = f.Stat()
 	if err != nil {
@@ -206,36 +227,34 @@ func (l *Logs) WriteLogRecord(log string) (err error) {
 	} else {
 		if fi.Size() > l.logFileSize { // 50Mb - максимальный размер лог-файла
 			f.Close()
-			l.CompressLogs()
-			return l.WriteLogRecord(log)
+			os.Rename(filepath.Join("./", ERROR_LOG_FILENAME), filepath.Join("./", ERROR_LOG_BKP_FILENAME))
+			go l.CompressLogs(ERROR_LOG_BKP_FILENAME)
+			return
 		}
-	}
-
-	if _, err = f.WriteString(log + `
-`); err != nil {
-		return
 	}
 	return
 }
 
 // RemoveLogFile, i - is what count retries for removing log
-func (l *Logs) RemoveLogFile(i int) (err error) {
-	err = os.RemoveAll("errors.log")
+func (l *Logs) RemoveLogFile(filename string, i int) (err error) {
+	l.Mutex.Lock()
+	err = os.RemoveAll(filename)
+	l.Mutex.Unlock()
 	if err != nil && i > 0 {
 		time.Sleep(100 * time.Millisecond)
 		i--
 		fmt.Printf("## RemoveLog - retry remove %d\n", i)
-		return l.RemoveLogFile(i)
+		return l.RemoveLogFile(filename, i)
 	}
 	return
 }
 
 // CompressLogs removing old archive file (archive.zip), make new archive file and removing old log file (errors.log)
-func (l *Logs) CompressLogs() (err error) {
-	os.RemoveAll("archive.zip")
+func (l *Logs) CompressLogs(filename string) (err error) {
+	l.RemoveLogFile(filename+".zip", 3)
 
 	var a *os.File
-	a, err = os.Create("archive.zip")
+	a, err = os.Create(filename + ".zip")
 	if err != nil {
 		return
 	}
@@ -245,13 +264,13 @@ func (l *Logs) CompressLogs() (err error) {
 	defer zipWriter.Close()
 
 	var w io.Writer
-	w, err = zipWriter.Create("errors.log")
+	w, err = zipWriter.Create(filename)
 	if err != nil {
 		return
 	}
 
 	var f *os.File
-	if f, err = os.OpenFile("errors.log", os.O_RDWR|os.O_APPEND, 0660); err != nil {
+	if f, err = os.OpenFile(filename, os.O_RDWR|os.O_APPEND, 0660); err != nil {
 		return
 	}
 
@@ -259,27 +278,7 @@ func (l *Logs) CompressLogs() (err error) {
 		return
 	}
 
-	err = os.RemoveAll("errors.log")
-	return
-}
-
-func getTime() (str string) {
-	var partDateToStr func(int) string = func(p int) string {
-		var str string
-		if p < 10 {
-			str = "0" + strconv.Itoa(p)
-		} else {
-			str = strconv.Itoa(p)
-		}
-		return str
-	}
-
-	now := time.Now()
-	str = partDateToStr(now.Year()) + "." +
-		partDateToStr(int(now.Month())) + "." +
-		partDateToStr(now.Day()) + "_" +
-		partDateToStr(now.Hour()) + ":" +
-		partDateToStr(now.Minute()) + ":" +
-		partDateToStr(now.Second())
+	err = os.RemoveAll(filename)
+	l.Alert("logfile was archived")
 	return
 }
