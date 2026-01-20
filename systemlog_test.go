@@ -6,7 +6,7 @@ import (
 
 // TestLogging ###############################################
 func TestLogging(t *testing.T) {
-	l := CreateLogs(4, 1)
+	l := CreateLogs("", 4, 1)
 	t.Logf("TestLogging start agent\n")
 
 	l.Print("input text")

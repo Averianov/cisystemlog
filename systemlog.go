@@ -20,6 +20,8 @@ var L *Logs
 type Logs struct {
 	sync.Mutex
 	caller      *runtime.Frame
+	logname     string
+	logdir      string
 	logLevel    int32
 	logFileSize int64
 	f           *os.File
@@ -31,8 +33,8 @@ const (
 	INFO    string = "INFO"
 	DEBUG   string = "DEBG"
 
-	ERROR_LOG_FILENAME     string = "errors.log"
-	ERROR_LOG_BKP_FILENAME string = "errors_bkp.log"
+	DEFAULT_ERROR_LOG_FILENAME string = "errors"
+	//ERROR_LOG_BKP_FILENAME string = "errors_bkp"
 )
 
 // ### From Logrus Code #############################################
@@ -111,14 +113,26 @@ func getCaller() *runtime.Frame {
 
 // Size (Mb) = int64 * 1 000 000 byte. If Size==0 then filelog not created.
 // LogLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
-func CreateLogs(logLevel int32, size int64) (l *Logs) {
+func CreateLogs(logname, logdir string, logLevel int32, size int64) (l *Logs) {
+	if logname == "" {
+		logname = DEFAULT_ERROR_LOG_FILENAME
+	}
+
+	if logdir == "" {
+		logdir = "./"
+	} else if logdir[len(logdir)-1] != '/' {
+		logdir = logdir + "/"
+	}
+
 	L = &Logs{
+		logname:     logname,
+		logdir:      logdir,
 		logLevel:    logLevel,
 		logFileSize: size * 1000000,
 	}
-	L.RemoveLogFile(ERROR_LOG_BKP_FILENAME, 2)
-	L.RemoveLogFile(ERROR_LOG_FILENAME, 2)
-	L.RemoveLogFile(ERROR_LOG_FILENAME+".zip", 2)
+
+	L.RemoveLogFile(logdir+logname+".log", 2)
+	L.RemoveLogFile(logdir+logname+"bkp.zip", 2)
 	return L
 }
 
