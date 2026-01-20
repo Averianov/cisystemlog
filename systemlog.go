@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -19,12 +18,11 @@ var L *Logs
 
 type Logs struct {
 	sync.Mutex
-	caller      *runtime.Frame
-	logname     string
-	logdir      string
-	logLevel    int32
-	logFileSize int64
-	f           *os.File
+	caller   *runtime.Frame
+	filename string
+	level    int32
+	fileSize int64
+	f        *os.File
 }
 
 const (
@@ -125,20 +123,19 @@ func CreateLogs(logname, logdir string, logLevel int32, size int64) (l *Logs) {
 	}
 
 	L = &Logs{
-		logname:     logname,
-		logdir:      logdir,
-		logLevel:    logLevel,
-		logFileSize: size * 1000000,
+		filename: logdir + logname,
+		level:    logLevel,
+		fileSize: size * 1000000,
 	}
 
-	L.RemoveLogFile(logdir+logname+".log", 2)
-	L.RemoveLogFile(logdir+logname+"bkp.zip", 2)
+	L.RemoveLogFile(L.filename+".log", 2)
+	L.RemoveLogFile(L.filename+"bkp.zip", 2)
 	return L
 }
 
 // Print - just print message without any type and logging
 func (l *Logs) Print(any ...interface{}) {
-	if l.logLevel < 4 {
+	if l.level < 4 {
 		return
 	}
 	fmt.Println(l.Sprint("", any...))
@@ -146,7 +143,7 @@ func (l *Logs) Print(any ...interface{}) {
 
 // Debug - message used for debug data
 func (l *Logs) Debug(any ...interface{}) {
-	if l.logLevel < 4 {
+	if l.level < 4 {
 		return
 	}
 	w := l.Sprint("\033[37m"+DEBUG+"\033[0m", any...)
@@ -156,7 +153,7 @@ func (l *Logs) Debug(any ...interface{}) {
 
 // Info - message used for informing data
 func (l *Logs) Info(any ...interface{}) {
-	if l.logLevel < 3 {
+	if l.level < 3 {
 		return
 	}
 	w := l.Sprint("\033[96m"+INFO+"\033[0m", any...)
@@ -166,7 +163,7 @@ func (l *Logs) Info(any ...interface{}) {
 
 // Warning - message used for errors and other warning events
 func (l *Logs) Warning(any ...interface{}) {
-	if l.logLevel < 2 {
+	if l.level < 2 {
 		return
 	}
 	w := l.Sprint("\033[93m"+WARNING+"\033[0m", any...)
@@ -212,14 +209,14 @@ func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
 
 // WriteLogRecord, i - is what count retries for removing log
 func (l *Logs) WriteLogRecord(log string) (err error) {
-	if l.logFileSize == 0 {
+	if l.fileSize == 0 {
 		//
 		return
 	}
 	l.Lock()
 	var f *os.File
-	if f, err = os.OpenFile(ERROR_LOG_FILENAME, os.O_RDWR|os.O_APPEND, 0660); err != nil {
-		if f, err = os.Create(ERROR_LOG_FILENAME); err != nil {
+	if f, err = os.OpenFile(l.filename+".log", os.O_RDWR|os.O_APPEND, 0660); err != nil {
+		if f, err = os.Create(l.filename + ".log"); err != nil {
 			fmt.Printf("%s\n", err.Error())
 			return
 		}
@@ -239,10 +236,10 @@ func (l *Logs) WriteLogRecord(log string) (err error) {
 	if err != nil {
 		fmt.Printf("## WriteLog - Error get file info: %s\n", err.Error())
 	} else {
-		if fi.Size() > l.logFileSize { // 50Mb - максимальный размер лог-файла
+		if fi.Size() > l.fileSize { // 50Mb - максимальный размер лог-файла
 			f.Close()
-			os.Rename(filepath.Join("./", ERROR_LOG_FILENAME), filepath.Join("./", ERROR_LOG_BKP_FILENAME))
-			go l.CompressLogs(ERROR_LOG_BKP_FILENAME)
+			os.Rename(l.filename+".log", l.filename+"_bkp.log")
+			go l.CompressLogs(l.filename + "_bkp.log")
 			return
 		}
 	}
@@ -293,6 +290,6 @@ func (l *Logs) CompressLogs(filename string) (err error) {
 	}
 
 	err = os.RemoveAll(filename)
-	l.Alert("logfile was archived")
+	l.Alert("logfile %s was archived", filename)
 	return
 }

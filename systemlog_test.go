@@ -6,7 +6,7 @@ import (
 
 // TestLogging ###############################################
 func TestLogging(t *testing.T) {
-	l := CreateLogs("", 4, 1)
+	l := CreateLogs("", "", 4, 1)
 	t.Logf("TestLogging start agent\n")
 
 	l.Print("input text")
@@ -23,6 +23,6 @@ func TestLogging(t *testing.T) {
 
 	var list []int = make([]int, 20000)
 	for i, _ := range list {
-		l.Alert("####################################################WERYBITDATA%d######################################################", i)
+		l.Alert("####################################################WERYBIGDATA%d######################################################", i)
 	}
 }
