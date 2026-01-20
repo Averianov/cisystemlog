@@ -30,9 +30,6 @@ const (
 	WARNING string = "WARN"
 	INFO    string = "INFO"
 	DEBUG   string = "DEBG"
-
-	DEFAULT_ERROR_LOG_FILENAME string = "errors"
-	//ERROR_LOG_BKP_FILENAME string = "errors_bkp"
 )
 
 // ### From Logrus Code #############################################
@@ -113,13 +110,16 @@ func getCaller() *runtime.Frame {
 // LogLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
 func CreateLogs(logname, logdir string, logLevel int32, size int64) (l *Logs) {
 	if logname == "" {
-		logname = DEFAULT_ERROR_LOG_FILENAME
+		logname = "errors"
 	}
 
 	if logdir == "" {
 		logdir = "./"
-	} else if logdir[len(logdir)-1] != '/' {
-		logdir = logdir + "/"
+	} else {
+		runes := []rune(logdir)
+		if runes[len(runes)-1] != '/' {
+			logdir = logdir + "/"
+		}
 	}
 
 	L = &Logs{
