@@ -1,4 +1,4 @@
-package systemlog
+package cisystemlog
 
 import (
 	"archive/zip"
@@ -6,8 +6,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"runtime"
-	"strings"
 	"sync"
 	"time"
 )
@@ -16,98 +14,30 @@ var L *Logs
 
 // ### Logger Factory
 
+const (
+	ALERT   int32 = 1
+	WARNING int32 = 2
+	INFO    int32 = 3
+	DEBUG   int32 = 4
+
+	ALERT_STRING   string = "ALRT"
+	WARNING_STRING string = "WARN"
+	INFO_STRING    string = "INFO"
+	DEBUG_STRING   string = "DEBG"
+	EMPTY_STRING   string = "    "
+)
+
 type Logs struct {
 	sync.Mutex
-	caller   *runtime.Frame
+	fileLevels map[string]int32 // file name, level log
 	filename string
-	level    int32
+	globalLevel    int32
 	fileSize int64
 	f        *os.File
 }
 
-const (
-	ALERT   string = "ALRT"
-	WARNING string = "WARN"
-	INFO    string = "INFO"
-	DEBUG   string = "DEBG"
-)
-
-// ### From Logrus Code #############################################
-// #################################################################
-var (
-	// qualified package name, cached at first use
-	logrusPackage string
-
-	// Positions in the call stack when tracing to report the calling method
-	minimumCallerDepth int
-
-	// Used for caller information initialisation
-	callerInitOnce sync.Once
-)
-
-const (
-	maximumCallerDepth int = 25
-	knownLogrusFrames  int = 4
-)
-
-// getPackageName reduces a fully qualified function name to the package name
-// There really ought to be to be a better way...
-func getPackageName(f string) string {
-	for {
-		lastPeriod := strings.LastIndex(f, ".")
-		lastSlash := strings.LastIndex(f, "/")
-		if lastPeriod > lastSlash {
-			f = f[:lastPeriod]
-		} else {
-			break
-		}
-	}
-
-	return f
-}
-
-// getCaller retrieves the name of the first non-logrus calling function
-func getCaller() *runtime.Frame {
-	// cache this package's fully-qualified name
-	callerInitOnce.Do(func() {
-		pcs := make([]uintptr, maximumCallerDepth)
-		_ = runtime.Callers(0, pcs)
-
-		// dynamic get the package name and the minimum caller depth
-		for i := 0; i < maximumCallerDepth; i++ {
-			funcName := runtime.FuncForPC(pcs[i]).Name()
-			if strings.Contains(funcName, "getCaller") {
-				logrusPackage = getPackageName(funcName)
-				break
-			}
-		}
-
-		minimumCallerDepth = knownLogrusFrames
-	})
-
-	// Restrict the lookback frames to avoid runaway lookups
-	pcs := make([]uintptr, maximumCallerDepth)
-	depth := runtime.Callers(minimumCallerDepth, pcs)
-	frames := runtime.CallersFrames(pcs[:depth])
-
-	for f, again := frames.Next(); again; f, again = frames.Next() {
-		pkg := getPackageName(f.Function)
-
-		// If the caller isn't part of this package, we're done
-		if pkg != logrusPackage {
-			return &f //nolint:scopelint
-		}
-	}
-
-	// if we got here, we failed to find the caller's context
-	return nil
-}
-
-// #################################################################
-// #################################################################
-
 // Size (Mb) = int64 * 1 000 000 byte. If Size==0 then filelog not created.
-// LogLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
+// logLevel: {1 - only Alert; 2 - Alert & Warning; 3 - all without Debug; 4 - all}
 func CreateLogs(logname, logdir string, logLevel int32, size int64) (l *Logs) {
 	if logname == "" {
 		logname = "errors"
@@ -122,10 +52,17 @@ func CreateLogs(logname, logdir string, logLevel int32, size int64) (l *Logs) {
 		}
 	}
 
-	L = &Logs{
-		filename: logdir + logname,
-		level:    logLevel,
-		fileSize: size * 1000000,
+	if L == nil {
+		L = &Logs{
+			filename: logdir + logname,
+			globalLevel:    logLevel,
+			fileSize: size * 1000000,
+			fileLevels: make(map[string]int32),
+		}
+	} else {
+		L.filename = logdir + logname
+		L.globalLevel = logLevel
+		L.fileSize = size * 1000000
 	}
 
 	L.RemoveLogFile(L.filename+".log", 2)
@@ -133,78 +70,118 @@ func CreateLogs(logname, logdir string, logLevel int32, size int64) (l *Logs) {
 	return L
 }
 
-// Print - just print message without any type and logging
-func (l *Logs) Print(any ...interface{}) {
-	if l.level < 4 {
+func LevelToString(lvl int32) (string) {
+	switch lvl {
+	case ALERT:
+		return ALERT_STRING
+	case WARNING:
+		return WARNING_STRING
+	case INFO:
+		return INFO_STRING
+	case DEBUG:
+		return DEBUG_STRING
+	default:
+		return EMPTY_STRING
+	}
+}
+
+func SetFileLevel(level int32) {
+	if L == nil {
+		L = CreateLogs("", "", level, 1)
+	}
+
+	callerData := getCallerData(0)
+	if callerData == nil {
+		L.Warning("callerData is nil")
 		return
 	}
-	fmt.Println(l.Sprint("", any...))
+	L.fileLevels[callerData.fileName] = level
+	L.Print("Set level:%s to file:%s", addLevelString(level), callerData.fileName)
+}
+
+func addLevelString(level int32) string {
+	startCode := "\033[96m"
+	endCode := "\033[0m"
+	switch level {
+	case DEBUG:
+		startCode = "\033[37m"
+	case INFO:
+		startCode = "\033[96m"
+	case WARNING:
+		startCode = "\033[93m"
+	case ALERT:
+		startCode = "\033[91m"
+	}
+	return startCode+LevelToString(level)+endCode
+}
+
+// Sprint - make log record (date_time source	type event)
+func (l *Logs) Sprint(level int32, any ...interface{}) (str string) {
+	str = time.Now().Format("2006.01.02_15:04:05")
+
+	if level > DEBUG || level < ALERT {
+		str += "			"
+	} else {
+		cd := getCallerData(1)
+		if cd == nil {
+			cd = &callerData{
+				fileName: "unknown",
+				lineNumber: 0,
+				funcName: "unknown",
+				packageName: "unknown",
+			}
+		}
+
+		if level < 0 {
+			return
+		}
+		if level > l.globalLevel {
+			if reqLvl, ok := l.fileLevels[cd.fileName]; ok {
+				if level > reqLvl {
+					return
+				}
+			} else {
+				return
+			}
+		}
+		str += " \033[90m\033[47m"                                    // set white background
+		str += fmt.Sprintf("%s:%d", cd.fileName, cd.lineNumber)
+		str += "\033[0m"
+		str += "\t"
+	}
+
+	str += addLevelString(level)
+	str += " "
+	str += fmt.Sprintf(fmt.Sprintf("%v", any[0]), any[1:]...)
+
+	l.WriteLogRecord(str)
+	fmt.Println(str)
+	return
+}
+
+// Print - just print message without any type and logging
+func (l *Logs) Print(any ...interface{}) {
+	l.Sprint(0, any...)
 }
 
 // Debug - message used for debug data
 func (l *Logs) Debug(any ...interface{}) {
-	if l.level < 4 {
-		return
-	}
-	w := l.Sprint("\033[37m"+DEBUG+"\033[0m", any...)
-	l.WriteLogRecord(w)
-	fmt.Println(w)
+	l.Sprint(DEBUG, any...)
 }
 
 // Info - message used for informing data
 func (l *Logs) Info(any ...interface{}) {
-	if l.level < 3 {
-		return
-	}
-	w := l.Sprint("\033[96m"+INFO+"\033[0m", any...)
-	l.WriteLogRecord(w)
-	fmt.Println(w)
+	l.Sprint(INFO, any...)
 }
 
 // Warning - message used for errors and other warning events
 func (l *Logs) Warning(any ...interface{}) {
-	if l.level < 2 {
-		return
-	}
-	w := l.Sprint("\033[93m"+WARNING+"\033[0m", any...)
-	l.WriteLogRecord(w)
-	fmt.Println(w)
+	l.Sprint(WARNING, any...)
 }
 
 // Alert - used for emergency message
 func (l *Logs) Alert(any ...interface{}) {
-	a := l.Sprint("\033[91m"+ALERT+"\033[0m", any...)
-	l.WriteLogRecord(a)
-	fmt.Println(a)
-}
-
-// Sprint - make log record (date_time source	type event)
-func (l *Logs) Sprint(mtype string, any ...interface{}) (str string) {
-	str = time.Now().Format("2006.01.02_15:04:05")
-
-	if mtype == "\033[96m"+INFO+"\033[0m" {
-		str += "			"
-	} else {
-		l.caller = getCaller()
-		if l.caller != nil {
-			fileVal := fmt.Sprintf("%s:%d", l.caller.File, l.caller.Line) // get source - file name and line number
-			str += " \033[90m\033[47m"                                    // set white background
-			str += fileVal[strings.LastIndex(fileVal, "/")+1:]            // get last parsed value
-			str += "\033[0m"
-			str += "\t"
-		} else {
-			str += "			"
-		}
-	}
-	//funcVal := l.caller.Function // get function name
-	//str += "  " + funcVal[strings.LastIndex(funcVal, "/")+1:]
-
-	if mtype != "" {
-		mtype += " "
-	}
-	str += mtype
-	str += fmt.Sprintf(fmt.Sprintf("%v", any[0]), any[1:]...)
-	return
+	l.Sprint(ALERT, any...)
 }
 
 // WriteLogRecord, i - is what count retries for removing log
@@ -217,7 +194,7 @@ func (l *Logs) WriteLogRecord(log string) (err error) {
 	var f *os.File
 	if f, err = os.OpenFile(l.filename+".log", os.O_RDWR|os.O_APPEND, 0660); err != nil {
 		if f, err = os.Create(l.filename + ".log"); err != nil {
-			fmt.Printf("%s\n", err.Error())
+			l.Warning("%s", err.Error())
 			return
 		}
 	}
@@ -234,7 +211,7 @@ func (l *Logs) WriteLogRecord(log string) (err error) {
 	var fi fs.FileInfo
 	fi, err = f.Stat()
 	if err != nil {
-		fmt.Printf("## WriteLog - Error get file info: %s\n", err.Error())
+		l.Warning("Error get file info: %s", err.Error())
 	} else {
 		if fi.Size() > l.fileSize { // 50Mb - максимальный размер лог-файла
 			f.Close()
@@ -254,7 +231,7 @@ func (l *Logs) RemoveLogFile(filename string, i int) (err error) {
 	if err != nil && i > 0 {
 		time.Sleep(100 * time.Millisecond)
 		i--
-		fmt.Printf("## RemoveLog - retry remove %d\n", i)
+		l.Warning("retry remove %d", i)
 		return l.RemoveLogFile(filename, i)
 	}
 	return
