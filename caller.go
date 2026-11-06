@@ -4,7 +4,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"fmt"
 )
 
 type callerData struct {
@@ -80,7 +79,7 @@ func getCaller(requiredDepth int) *runtime.Frame {
 
 		pkg := getPackageName(f.Function)
 		// If the caller isn't part of this package, we're done
-		if pkg == logrusPackage {
+		if pkg != logrusPackage {
 			if requiredDepth == 0 {
 				return &f
 			}

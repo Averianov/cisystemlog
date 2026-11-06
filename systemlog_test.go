@@ -6,15 +6,12 @@ import (
 
 // TestLogging ###############################################
 func TestLogging(t *testing.T) {
-	CreateLogs("", "", ALERT, 1)
+	CreateLogs("", "", ALERT, 0)
 	t.Logf("TestLogging start agent\n")
 
-	// var list []int = make([]int, 20000)
-	// for i, _ := range list {
-	// 	L.Alert("####################################################WERYBIGDATA%d######################################################", i)
-	// }
-
-	CheckFileLevel()
-	t.Logf("check\n")
-	t.Errorf("view test")
+	var list []int = make([]int, 20000)
+	for i, _ := range list {
+		L.Alert("####################################################WERYBIGDATA%d######################################################", i)
+	}
+	//t.Errorf("view test")
 }

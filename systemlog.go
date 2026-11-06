@@ -65,6 +65,8 @@ func CreateLogs(logname, logdir string, logLevel int32, size int64) (l *Logs) {
 		L.fileSize = size * 1000000
 	}
 
+	L.Alert("Set global level:%s", addLevelString(logLevel))
+
 	L.RemoveLogFile(L.filename+".log", 2)
 	L.RemoveLogFile(L.filename+"bkp.zip", 2)
 	return L
@@ -85,20 +87,6 @@ func LevelToString(lvl int32) (string) {
 	}
 }
 
-func SetFileLevel(level int32) {
-	if L == nil {
-		L = CreateLogs("", "", level, 1)
-	}
-
-	callerData := getCallerData(0)
-	if callerData == nil {
-		L.Warning("callerData is nil")
-		return
-	}
-	L.fileLevels[callerData.fileName] = level
-	L.Print("Set level:%s to file:%s", addLevelString(level), callerData.fileName)
-}
-
 func addLevelString(level int32) string {
 	startCode := "\033[96m"
 	endCode := "\033[0m"
@@ -115,6 +103,24 @@ func addLevelString(level int32) string {
 	return startCode+LevelToString(level)+endCode
 }
 
+func (l *Logs) checkLogStructure(level int32) {
+	if l == nil {
+		l = CreateLogs("", "", level, 0)
+	}
+}
+
+func (l *Logs) SetFileLevel(level int32) {
+	l.checkLogStructure(level)
+
+	callerData := getCallerData(0)
+	if callerData == nil {
+		L.Warning("callerData is nil")
+		return
+	}
+	L.fileLevels[callerData.fileName] = level
+	L.Print("Set level:%s for file:%s", addLevelString(level), callerData.fileName)
+}
+
 // Sprint - make log record (date_time source	type event)
 func (l *Logs) Sprint(level int32, any ...interface{}) (str string) {
 	str = time.Now().Format("2006.01.02_15:04:05")
@@ -122,7 +128,7 @@ func (l *Logs) Sprint(level int32, any ...interface{}) (str string) {
 	if level > DEBUG || level < ALERT {
 		str += "			"
 	} else {
-		cd := getCallerData(1)
+		cd := getCallerData(0)
 		if cd == nil {
 			cd = &callerData{
 				fileName: "unknown",
@@ -161,26 +167,31 @@ func (l *Logs) Sprint(level int32, any ...interface{}) (str string) {
 
 // Print - just print message without any type and logging
 func (l *Logs) Print(any ...interface{}) {
+	l.checkLogStructure(INFO)
 	l.Sprint(0, any...)
 }
 
 // Debug - message used for debug data
 func (l *Logs) Debug(any ...interface{}) {
+	l.checkLogStructure(DEBUG)
 	l.Sprint(DEBUG, any...)
 }
 
 // Info - message used for informing data
 func (l *Logs) Info(any ...interface{}) {
+	l.checkLogStructure(INFO)
 	l.Sprint(INFO, any...)
 }
 
 // Warning - message used for errors and other warning events
 func (l *Logs) Warning(any ...interface{}) {
+	l.checkLogStructure(WARNING)
 	l.Sprint(WARNING, any...)
 }
 
 // Alert - used for emergency message
 func (l *Logs) Alert(any ...interface{}) {
+	l.checkLogStructure(ALERT)
 	l.Sprint(ALERT, any...)
 }
 
