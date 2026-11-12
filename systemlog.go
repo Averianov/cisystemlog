@@ -103,14 +103,14 @@ func addLevelString(level int32) string {
 	return startCode+LevelToString(level)+endCode
 }
 
-func (l *Logs) checkLogStructure(level int32) {
+func (l *Logs) checkLogStructure() {
 	if l == nil {
-		l = CreateLogs("", "", level, 0)
+		l = CreateLogs("", "", ALERT, 0)
 	}
 }
 
 func (l *Logs) SetFileLevel(level int32) {
-	l.checkLogStructure(level)
+	l.checkLogStructure()
 
 	callerData := getCallerData(0)
 	if callerData == nil {
