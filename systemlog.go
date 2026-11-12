@@ -167,31 +167,31 @@ func (l *Logs) Sprint(level int32, any ...interface{}) (str string) {
 
 // Print - just print message without any type and logging
 func (l *Logs) Print(any ...interface{}) {
-	l.checkLogStructure(INFO)
+	l.checkLogStructure()
 	l.Sprint(0, any...)
 }
 
 // Debug - message used for debug data
 func (l *Logs) Debug(any ...interface{}) {
-	l.checkLogStructure(DEBUG)
+	l.checkLogStructure()
 	l.Sprint(DEBUG, any...)
 }
 
 // Info - message used for informing data
 func (l *Logs) Info(any ...interface{}) {
-	l.checkLogStructure(INFO)
+	l.checkLogStructure()
 	l.Sprint(INFO, any...)
 }
 
 // Warning - message used for errors and other warning events
 func (l *Logs) Warning(any ...interface{}) {
-	l.checkLogStructure(WARNING)
+	l.checkLogStructure()
 	l.Sprint(WARNING, any...)
 }
 
 // Alert - used for emergency message
 func (l *Logs) Alert(any ...interface{}) {
-	l.checkLogStructure(ALERT)
+	l.checkLogStructure()
 	l.Sprint(ALERT, any...)
 }
 
